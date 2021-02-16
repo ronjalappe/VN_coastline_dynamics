@@ -1,0 +1,16 @@
+<mxfile host="65bd71144e" modified="2021-02-12T10:47:59.865Z" agent="5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.53.0 Chrome/87.0.4280.141 Electron/11.2.1 Safari/537.36" version="14.2.4" etag="wAEqPNz5MFrpa6ruBs8U" type="embed">
+    <diagram id="V2G3AOq-VX4QmFLbKcat" name="Page-1">
+        <mxGraphModel dx="806" dy="459" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="2" value="" style="line;strokeWidth=2;direction=south;html=1;rotation=87;" vertex="1" parent="1">
+                    <mxGeometry x="320" y="-52.59" width="10" height="450" as="geometry"/>
+                </mxCell>
+                <mxCell id="3" value="alle 100 m 1 Transekt,&lt;br&gt;Line length: 1000&lt;br&gt;1000/100 = 10 = a&lt;br&gt;1000/a = 100&lt;br&gt;&lt;br&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="180" y="200" width="250" height="138" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>
