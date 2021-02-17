@@ -1,1 +1,2 @@
-*.txt
+/Stand.txt
+/.env.development
