@@ -117,7 +117,7 @@ def remove_small_lines(gdf, min_size):
         A projected coordinate system is recommended for any measurements.
                         
     Returns:
-        GeoDataFrame: Geopanads GeoDataFrame containing LineString or MultiLineString geometries with added
+        GeoDataFrame: Geopanads GeoDataFrame containismooth_linesng LineString or MultiLineString geometries with added
         'length' information.
     """
     # get the length of each item in dataframe
@@ -138,7 +138,9 @@ def draw_transects(gdf, length, distance):
     all_transects = []
     for index, line in gdf.iterrows():
         line = gdf.geometry.iloc[index]
-        if type(line) == shp.geometry.multilinestring.MultiLineString:
+        type_MLS = shp.geometry.multilinestring.MultiLineString
+        type_LS = shp.geometry.linestring.LineString
+        if type(line) == type_MLS or type_LS:
             if line.length > 500:
                 n_points = int(line.length/distance)
             print(index, "n_points:", n_points)        
@@ -179,23 +181,48 @@ box_file = "test_box.geojson"
 
 #raster_masked = rio.open(os.path.join(data_dir, raster_file_masked))
 #reproject_raster(os.path.join(data_dir, raster_file_masked), out_path, vn_crs)
-raster_reproj = rio.open(out_path)
-shoreline = subpixel_contours(raster=raster_reproj, scale=30)
-shoreline.to_file(os.path.join(data_dir, os.path.splitext(raster_file_masked)[0]+"_shoreline.geojson"), driver="GeoJSON")
-shoreline_cleaned = remove_small_lines(shoreline, 1000)
-shoreline_cleaned.to_file(os.path.join(data_dir,os.path.splitext(raster_file_masked)[0]+"_shoreline_cleaned.geojson"),driver="GeoJSON")
+#raster_reproj = rio.open(out_path)
+#shoreline = subpixel_contours(raster=raster_reproj, scale=30)
+#shoreline.to_file(os.path.join(data_dir, os.path.splitext(raster_file_masked)[0]+"_shoreline.geojson"), driver="GeoJSON")
+#shoreline_cleaned = remove_small_lines(shoreline, 1000)
+#shoreline_cleaned.to_file(os.path.join(data_dir,os.path.splitext(raster_file_masked)[0]+"_shoreline_cleaned.geojson"),driver="GeoJSON")
 
-#rfsl = gpd.read_file(os.path.join(data_dir,rfsl_file))
-rfsl = rfsl.to_crs(vn_crs)
 box = gpd.read_file(os.path.join(data_dir,box_file))
 box = box.to_crs(vn_crs)
-rfsl_clip = gpd.clip(rfsl,box).reset_index(drop=True)
-#print(rfsl_clip)
-rfsl_clip.to_file(os.path.join(data_dir,"rfsl_clip.geojson"),driver="GeoJSON")
-rfsl_clip.to_file(os.path.join(data_dir,"rfsl_clip.geojson"),driver="GeoJSON")
-#rfsl_clip = gpd.read_file(os.path.join(data_dir,"rfsl_clip.geojson"))
+rfsl = gpd.read_file(os.path.join(data_dir,"osm_coastline_epsg4326.geojson"))
+rfsl = rfsl.to_crs(vn_crs)
+rfsl = gpd.clip(rfsl,box).reset_index(drop=True)
+rfsl.to_file(os.path.join(data_dir,"osm_coastline_clip"),driver="GeoJSON")
 
-transects = draw_transects(rfsl_clip,1000,100)
-transects.to_file(os.path.join(data_dir,"rfsl_transects.geojson"),driver="GeoJSON")
+simpler_lines = []
+for index, line in rfsl.iterrows():
+    print(index)
+    simpler = rfsl.geometry.iloc[index].simplify(tolerance=200)
+    simpler_lines.append(simpler)
+simpler_lines_gdf = gpd.GeoDataFrame(geometry=simpler_lines,crs=rfsl.crs)
+simpler_lines_gdf.to_file(os.path.join(data_dir,"osm_coastline_clip_simplified"),driver="GeoJSON")
+
+from geosmoothing.geosmoothing import GeoSmoothing
+gsm = GeoSmoothing()
+simpler_lines_smooth = []
+for index, row in simpler_lines_gdf.iterrows():
+    geometry = simpler_lines_gdf.geometry.iloc[index]
+    if type(geometry) == shp.geometry.linestring.LineString:
+        line = geometry
+        if line.length > 500:
+            smooth = gsm.smoothWkt(line.wkt)
+            smooth = shp.wkt.loads(smooth)
+            simpler_lines_smooth.append(smooth)
+    elif type(geometry) == shp.geometry.multilinestring.MultiLineString:
+        for line in geometry:
+            if line.length > 500:
+                smooth = gsm.smoothWkt(line.wkt)
+                smooth = shp.wkt.loads(smooth)
+                simpler_lines_smooth.append(smooth)
+simpler_lines_smooth_gdf = gpd.GeoDataFrame(geometry=simpler_lines_smooth,crs=vn_crs)
+simpler_lines_smooth_gdf.to_file(os.path.join(data_dir,"osm_coastline_clip_simplified_smooth"),driver="GeoJSON")
+
+transects = draw_transects(simpler_lines_smooth_gdf,3000,100)
+transects.to_file(os.path.join(data_dir,"osm_coastline_clip_simplified_smooth_transects"),driver="GeoJSON")
 
 print('Done!')
