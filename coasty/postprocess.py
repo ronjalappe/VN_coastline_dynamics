@@ -168,7 +168,7 @@ def draw_transects(gdf, length, distance):
 
 # TEST IT 
 import os
-data_dir = "/Users/Ronjamac/Documents/02_Studium/Masterarbeit/Code/VN_coastline_dynamics/test_data/"
+data_dir = os.path.join(os.getcwd(),"test_data")
 raster_file_masked = "1_1988_L5_P1_13aq_masked.tif"
 vn_crs = "EPSG:3857" #EPSG:3857" #projected coordinate system of the world
 out_path = os.path.join(data_dir, os.path.splitext(raster_file_masked)[0]+"_reproj.tif")
@@ -185,7 +185,7 @@ shoreline.to_file(os.path.join(data_dir, os.path.splitext(raster_file_masked)[0]
 shoreline_cleaned = remove_small_lines(shoreline, 1000)
 shoreline_cleaned.to_file(os.path.join(data_dir,os.path.splitext(raster_file_masked)[0]+"_shoreline_cleaned.geojson"),driver="GeoJSON")
 
-rfsl = gpd.read_file(os.path.join(data_dir,rfsl_file))
+#rfsl = gpd.read_file(os.path.join(data_dir,rfsl_file))
 rfsl = rfsl.to_crs(vn_crs)
 box = gpd.read_file(os.path.join(data_dir,box_file))
 box = box.to_crs(vn_crs)
