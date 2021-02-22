@@ -141,7 +141,8 @@ def draw_transects(gdf, length, distance):
         line = gdf.geometry.iloc[index]
         type_MLS = shp.geometry.multilinestring.MultiLineString
         type_LS = shp.geometry.linestring.LineString
-        if type(line) == type_MLS or type_LS:
+        type_P = shp.geometry.polygon.Polygon
+        if type(line) == type_MLS or type_LS or type_P:
             if line.length > 500:
                 n_points = int(line.length/distance)
             print(index, "n_points:", n_points)        
@@ -153,11 +154,56 @@ def draw_transects(gdf, length, distance):
                     a = new_points[index]
                     b = new_points[index+1]
                     ab = shp.geometry.LineString([a,b])
-                    left = ab.parallel_offset(length / 2, 'left')
-                    right = ab.parallel_offset(length / 2, 'right')
+                    left = ab.parallel_offset(length/4, 'left') #/2
+                    right = ab.parallel_offset(length, 'right') #/2
                     c = left.boundary[1]
                     d = right.boundary[0]  # note the different orientation for right offset
                     cd = shp.geometry.LineString([c, d])
+                    transects.append(cd)
+            transects_gdf = gpd.GeoDataFrame(geometry=transects,crs=crs)
+            all_transects.append(transects_gdf)
+
+    all_transects_gdf = pd.concat(all_transects,ignore_index=True)
+    all_transects_gdf['id'] = all_transects_gdf.index
+    return all_transects_gdf
+
+def draw_transects_polygon(gdf, length, distance):
+    crs = gdf.crs
+    all_transects = []
+    if type(gdf.geometry.iloc[0]) == shp.geometry.multipolygon.MultiPolygon:
+        print("Yes I'm multiple, sorry.")
+        gdf = gdf.explode().reset_index(drop=True)
+    for index, row in gdf.iterrows():
+        poly = row.geometry
+        if poly.length > distance*4:
+            n_points = int(poly.length/distance)
+            print(index, "n_points:", n_points)        
+            
+            new_xy = np.transpose([poly.exterior.interpolate(t).xy for t in np.linspace(0,poly.length,n_points,False)])[0]
+            x = new_xy[0]
+            y = new_xy[1]
+            # number of points where to interpolate
+            t1 = np.linspace(0, 1, len(x))
+            t2 = np.linspace(0, 1, n_points)
+            x2 = gaussian_filter1d(x, 3)
+            y2 = gaussian_filter1d(y, 3)
+            # interpolate on smoothed line
+            x3 = np.interp(t1, t2, x2)
+            y3 = np.interp(t1, t2, y2)
+            new_points = np.array([[x, y] for x, y in zip(x3, y3)])
+            new_polygon = shp.geometry.asPolygon(new_points)
+            
+            transects = []
+            for index, point in enumerate(new_points): 
+                if index+1 < len(new_points):
+                    a = new_points[index]
+                    b = new_points[index+1]
+                    ab = shp.geometry.LineString([a,b])
+                    left = ab.parallel_offset(length, 'left') #/2
+                    right = ab.parallel_offset(length, 'right') #/2
+                    c = left.boundary[1]
+                    d = right.boundary[0]  # note the different orientation for right offset
+                    cd = shp.geometry.LineString([c,d])
                     transects.append(cd)
             transects_gdf = gpd.GeoDataFrame(geometry=transects,crs=crs)
             all_transects.append(transects_gdf)
@@ -215,21 +261,28 @@ poly_file = "VN_processing_polygons_EPSG4326.geojson"
 #shoreline_cleaned.to_file(os.path.join(data_dir,os.path.splitext(raster_file_masked)[0]+"_shoreline_cleaned.geojson"),driver="GeoJSON")
 
 box = gpd.read_file(os.path.join(data_dir,poly_file))
-box = box[box.id == 3]
+box = box[box.id == 1]
 box = box.to_crs(vn_crs)
-rfsl = gpd.read_file(os.path.join(data_dir,"osm_coastline_epsg4326.geojson"))
-rfsl = rfsl.to_crs(vn_crs)
-rfsl_clip = gpd.clip(rfsl,box).reset_index(drop=True)
-rfsl_clip.to_file(os.path.join(data_dir,"osm_coastline_clip"),driver="GeoJSON")
+#rfsl = gpd.read_file(os.path.join(data_dir,"osm_coastline_epsg4326.geojson"))
+#rfsl = rfsl.to_crs(vn_crs)
+#rfsl_clip = gpd.clip(rfsl,box).reset_index(drop=True)
+#rfsl_clip.to_file(os.path.join(data_dir,"osm_coastline_clip"),driver="GeoJSON")
 
 
-simpler_lines = simplify_lines(rfsl_clip,200)
-simpler_lines.to_file(os.path.join(data_dir,"osm_coastline_clip_simplified"),driver="GeoJSON")
+#simpler_lines = simplify_lines(rfsl_clip,200)
+#simpler_lines.to_file(os.path.join(data_dir,"osm_coastline_clip_simplified"),driver="GeoJSON")
 
-simpler_lines_smooth = geosmooth_lines(simpler_lines,500)
-simpler_lines_smooth.to_file(os.path.join(data_dir,"osm_coastline_clip_simplified_smooth"),driver="GeoJSON")
+#simpler_lines_smooth = geosmooth_lines(simpler_lines,500)
+#simpler_lines_smooth.to_file(os.path.join(data_dir,"osm_coastline_clip_simplified_smooth"),driver="GeoJSON")
 
-transects = draw_transects(simpler_lines_smooth,2000,100)
-transects.to_file(os.path.join(data_dir,"osm_coastline_clip_simplified_smooth_transects"),driver="GeoJSON")
+VN_land = gpd.read_file(os.path.join(data_dir,"country_bounds.geojson"))
+VN_land = VN_land.to_crs("EPSG:3857")
+VN_land_clip = gpd.clip(VN_land,box)
+print(VN_land_clip)
+#VN_land_clip = VN_land_clip.buffer(-1000)
+#VN_land_clip = gpd.GeoDataFrame(geometry=VN_land_clip,crs=vn_crs)
+#VN_land_clip.to_file(os.path.join(data_dir,"country_bounds_clip_buffer"),driver="GeoJSON")
 
+transects = draw_transects_polygon(VN_land,3000,200)
+transects.to_file(os.path.join(data_dir,"country_bounds_buffer_transects"),driver="GeoJSON")
 print('Done!')
