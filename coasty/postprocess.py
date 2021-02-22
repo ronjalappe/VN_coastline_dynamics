@@ -8,6 +8,8 @@ from rasterio.warp import calculate_default_transform, reproject, Resampling
 from skimage import measure
 from scipy import interpolate
 from scipy.ndimage import gaussian_filter1d
+from geosmoothing.geosmoothing import GeoSmoothing
+
 
 def reproject_raster(raster_path, out_path, dst_crs):
     """Reprojects GeoTIFF to a desired CRS. The functions reads the GeoTIFF, reprojects
@@ -133,7 +135,6 @@ def remove_small_lines(gdf, min_size):
 
 
 def draw_transects(gdf, length, distance):
-
     crs = gdf.crs
     all_transects = []
     for index, line in gdf.iterrows():
@@ -164,7 +165,33 @@ def draw_transects(gdf, length, distance):
     all_transects_gdf['id'] = all_transects_gdf.index
     return all_transects_gdf
 
+def simplify_lines(gdf, tolerance=200):
+    simpler_lines = []
+    for index, line in gdf.iterrows():
+        simpler = gdf.geometry.iloc[index].simplify(tolerance=tolerance)
+        simpler_lines.append(simpler)
+    simpler_lines_gdf = gpd.GeoDataFrame(geometry=simpler_lines,crs=gdf.crs)
+    return simpler_lines_gdf
 
+def geosmooth_lines(gdf,min_length=500):
+    gsm = GeoSmoothing()
+    smooth_lines = []
+    for index, row in gdf.iterrows():
+        geometry = gdf.geometry.iloc[index]
+        if type(geometry) == shp.geometry.linestring.LineString:
+            line = geometry
+            if line.length > min_length:
+                smooth = gsm.smoothWkt(line.wkt)
+                smooth = shp.wkt.loads(smooth)
+                smooth_lines.append(smooth)
+        elif type(geometry) == shp.geometry.multilinestring.MultiLineString:
+            for line in geometry:
+                if line.length > min_length:
+                    smooth = gsm.smoothWkt(line.wkt)
+                    smooth = shp.wkt.loads(smooth)
+                    smooth_lines.append(smooth)
+    lines_smooth_gdf = gpd.GeoDataFrame(geometry=smooth_lines,crs=gdf.crs)
+    return lines_smooth_gdf
 
 
 
@@ -176,7 +203,7 @@ vn_crs = "EPSG:3857" #EPSG:3857" #projected coordinate system of the world
 out_path = os.path.join(data_dir, os.path.splitext(raster_file_masked)[0]+"_reproj.tif")
 rfsl_file = "OSM_coastline_VN_simplified"
 box_file = "test_box.geojson"
-
+poly_file = "VN_processing_polygons_EPSG4326.geojson"
 
 
 #raster_masked = rio.open(os.path.join(data_dir, raster_file_masked))
@@ -187,42 +214,22 @@ box_file = "test_box.geojson"
 #shoreline_cleaned = remove_small_lines(shoreline, 1000)
 #shoreline_cleaned.to_file(os.path.join(data_dir,os.path.splitext(raster_file_masked)[0]+"_shoreline_cleaned.geojson"),driver="GeoJSON")
 
-box = gpd.read_file(os.path.join(data_dir,box_file))
+box = gpd.read_file(os.path.join(data_dir,poly_file))
+box = box[box.id == 3]
 box = box.to_crs(vn_crs)
 rfsl = gpd.read_file(os.path.join(data_dir,"osm_coastline_epsg4326.geojson"))
 rfsl = rfsl.to_crs(vn_crs)
-rfsl = gpd.clip(rfsl,box).reset_index(drop=True)
-rfsl.to_file(os.path.join(data_dir,"osm_coastline_clip"),driver="GeoJSON")
+rfsl_clip = gpd.clip(rfsl,box).reset_index(drop=True)
+rfsl_clip.to_file(os.path.join(data_dir,"osm_coastline_clip"),driver="GeoJSON")
 
-simpler_lines = []
-for index, line in rfsl.iterrows():
-    print(index)
-    simpler = rfsl.geometry.iloc[index].simplify(tolerance=200)
-    simpler_lines.append(simpler)
-simpler_lines_gdf = gpd.GeoDataFrame(geometry=simpler_lines,crs=rfsl.crs)
-simpler_lines_gdf.to_file(os.path.join(data_dir,"osm_coastline_clip_simplified"),driver="GeoJSON")
 
-from geosmoothing.geosmoothing import GeoSmoothing
-gsm = GeoSmoothing()
-simpler_lines_smooth = []
-for index, row in simpler_lines_gdf.iterrows():
-    geometry = simpler_lines_gdf.geometry.iloc[index]
-    if type(geometry) == shp.geometry.linestring.LineString:
-        line = geometry
-        if line.length > 500:
-            smooth = gsm.smoothWkt(line.wkt)
-            smooth = shp.wkt.loads(smooth)
-            simpler_lines_smooth.append(smooth)
-    elif type(geometry) == shp.geometry.multilinestring.MultiLineString:
-        for line in geometry:
-            if line.length > 500:
-                smooth = gsm.smoothWkt(line.wkt)
-                smooth = shp.wkt.loads(smooth)
-                simpler_lines_smooth.append(smooth)
-simpler_lines_smooth_gdf = gpd.GeoDataFrame(geometry=simpler_lines_smooth,crs=vn_crs)
-simpler_lines_smooth_gdf.to_file(os.path.join(data_dir,"osm_coastline_clip_simplified_smooth"),driver="GeoJSON")
+simpler_lines = simplify_lines(rfsl_clip,200)
+simpler_lines.to_file(os.path.join(data_dir,"osm_coastline_clip_simplified"),driver="GeoJSON")
 
-transects = draw_transects(simpler_lines_smooth_gdf,3000,100)
+simpler_lines_smooth = geosmooth_lines(simpler_lines,500)
+simpler_lines_smooth.to_file(os.path.join(data_dir,"osm_coastline_clip_simplified_smooth"),driver="GeoJSON")
+
+transects = draw_transects(simpler_lines_smooth,2000,100)
 transects.to_file(os.path.join(data_dir,"osm_coastline_clip_simplified_smooth_transects"),driver="GeoJSON")
 
 print('Done!')
