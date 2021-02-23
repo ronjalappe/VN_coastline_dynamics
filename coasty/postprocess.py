@@ -8,8 +8,6 @@ from rasterio.warp import calculate_default_transform, reproject, Resampling
 from skimage import measure
 from scipy import interpolate
 from scipy.ndimage import gaussian_filter1d
-from geosmoothing.geosmoothing import GeoSmoothing
-
 
 def reproject_raster(raster_path, out_path, dst_crs):
     """Reprojects GeoTIFF to a desired CRS. The functions reads the GeoTIFF, reprojects
@@ -132,53 +130,31 @@ def remove_small_lines(gdf, min_size):
     # save in new dataframe with resetted indices
     new_gdf = new_gdf.reset_index(drop=True)
     return new_gdf
+    
+def draw_transects_polygon(gdf, length, distance, min_line_length):
+    """Create transects perpendicular to a polygons outline. The shape of the
+    the polygon is smoothed using a Gaussian Filter (Sigma: 3).  
 
+    Args:
+        gdf (GeoDataFrame): Geopandas GeoDataFrame with Polygons or Multipolygons
+        length (int): Length of the transects in m
+        distance (int): Distance between transects in m
+        min_line_length (int): Minimum length of the Polygon line to generate transects at the
 
-def draw_transects(gdf, length, distance):
-    crs = gdf.crs
-    all_transects = []
-    for index, line in gdf.iterrows():
-        line = gdf.geometry.iloc[index]
-        type_MLS = shp.geometry.multilinestring.MultiLineString
-        type_LS = shp.geometry.linestring.LineString
-        type_P = shp.geometry.polygon.Polygon
-        if type(line) == type_MLS or type_LS or type_P:
-            if line.length > 500:
-                n_points = int(line.length/distance)
-            print(index, "n_points:", n_points)        
-            new_points = [line.interpolate(p/float(n_points - 1), normalized=True) for p in range(n_points)]
-            new_line = shp.geometry.LineString(new_points)
-            transects = []
-            for index, point in enumerate(new_points): 
-                if index+1 < len(new_points):
-                    a = new_points[index]
-                    b = new_points[index+1]
-                    ab = shp.geometry.LineString([a,b])
-                    left = ab.parallel_offset(length/4, 'left') #/2
-                    right = ab.parallel_offset(length, 'right') #/2
-                    c = left.boundary[1]
-                    d = right.boundary[0]  # note the different orientation for right offset
-                    cd = shp.geometry.LineString([c, d])
-                    transects.append(cd)
-            transects_gdf = gpd.GeoDataFrame(geometry=transects,crs=crs)
-            all_transects.append(transects_gdf)
-
-    all_transects_gdf = pd.concat(all_transects,ignore_index=True)
-    all_transects_gdf['id'] = all_transects_gdf.index
-    return all_transects_gdf
-
-def draw_transects_polygon(gdf, length, distance):
+    Returns:
+        GeoDataFrame: Geopandas GeoDataFrame with transects as LineStrings 
+    """
     crs = gdf.crs
     all_transects = []
     if type(gdf.geometry.iloc[0]) == shp.geometry.multipolygon.MultiPolygon:
         print("Yes I'm multiple, sorry.")
         gdf = gdf.explode().reset_index(drop=True)
+    polygons = []
     for index, row in gdf.iterrows():
         poly = row.geometry
-        if poly.length > distance*4:
+        if poly.length > min_line_length:
             n_points = int(poly.length/distance)
             print(index, "n_points:", n_points)        
-            
             new_xy = np.transpose([poly.exterior.interpolate(t).xy for t in np.linspace(0,poly.length,n_points,False)])[0]
             x = new_xy[0]
             y = new_xy[1]
@@ -192,54 +168,25 @@ def draw_transects_polygon(gdf, length, distance):
             y3 = np.interp(t1, t2, y2)
             new_points = np.array([[x, y] for x, y in zip(x3, y3)])
             new_polygon = shp.geometry.asPolygon(new_points)
-            
+            polygons.append(new_polygon)
             transects = []
             for index, point in enumerate(new_points): 
                 if index+1 < len(new_points):
                     a = new_points[index]
                     b = new_points[index+1]
                     ab = shp.geometry.LineString([a,b])
-                    left = ab.parallel_offset(length, 'left') #/2
-                    right = ab.parallel_offset(length, 'right') #/2
+                    left = ab.parallel_offset(length/2, 'left')
+                    right = ab.parallel_offset(length/2, 'right')
                     c = left.boundary[1]
                     d = right.boundary[0]  # note the different orientation for right offset
                     cd = shp.geometry.LineString([c,d])
                     transects.append(cd)
             transects_gdf = gpd.GeoDataFrame(geometry=transects,crs=crs)
             all_transects.append(transects_gdf)
+    all_polygons_gdf = gpd.GeoDataFrame(geometry=polygons,crs=crs)
     all_transects_gdf = pd.concat(all_transects,ignore_index=True)
     all_transects_gdf['id'] = all_transects_gdf.index
     return all_transects_gdf
-
-def simplify_lines(gdf, tolerance=200):
-    simpler_lines = []
-    for index, line in gdf.iterrows():
-        simpler = gdf.geometry.iloc[index].simplify(tolerance=tolerance)
-        simpler_lines.append(simpler)
-    simpler_lines_gdf = gpd.GeoDataFrame(geometry=simpler_lines,crs=gdf.crs)
-    return simpler_lines_gdf
-
-def geosmooth_lines(gdf,min_length=500):
-    gsm = GeoSmoothing()
-    smooth_lines = []
-    for index, row in gdf.iterrows():
-        geometry = gdf.geometry.iloc[index]
-        if type(geometry) == shp.geometry.linestring.LineString:
-            line = geometry
-            if line.length > min_length:
-                smooth = gsm.smoothWkt(line.wkt)
-                smooth = shp.wkt.loads(smooth)
-                smooth_lines.append(smooth)
-        elif type(geometry) == shp.geometry.multilinestring.MultiLineString:
-            for line in geometry:
-                if line.length > min_length:
-                    smooth = gsm.smoothWkt(line.wkt)
-                    smooth = shp.wkt.loads(smooth)
-                    smooth_lines.append(smooth)
-    lines_smooth_gdf = gpd.GeoDataFrame(geometry=smooth_lines,crs=gdf.crs)
-    return lines_smooth_gdf
-
-
 
 # TEST IT 
 import os
@@ -283,6 +230,6 @@ print(VN_land_clip)
 #VN_land_clip = gpd.GeoDataFrame(geometry=VN_land_clip,crs=vn_crs)
 #VN_land_clip.to_file(os.path.join(data_dir,"country_bounds_clip_buffer"),driver="GeoJSON")
 
-transects = draw_transects_polygon(VN_land,3000,200)
-transects.to_file(os.path.join(data_dir,"country_bounds_buffer_transects"),driver="GeoJSON")
+transects = draw_transects_polygon(VN_land,5000,200,10000)
+transects.to_file(os.path.join(data_dir,"country_bounds_transects"),driver="GeoJSON")
 print('Done!')
