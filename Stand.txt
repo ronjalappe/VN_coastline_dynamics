@@ -1,0 +1,35 @@
+Stand letzte Woche
+
+ISSUE: one intersection per year and transect is definetly pos sible, but I couldn't find an appropriate method yet
+- tested: 
+    + closest to osm reference shoreline (is confused when rfsl is complex, or high dynamic)
+    + outermost points (seawards, works mostly fine, but problematic with islands)
+    + closest to median points (just also confused, when transect cut several structures)
+- other ideas? 
+    + keep them all and....
+    + maybe choose the outermost and exclude islands from entire analysis 
+    + but somehow difficult this one... 
+- solution: 
+    + cut transects at vectorized, harmonized min water extent raster
+
+ISSUE: if year doesn't exist at shore (due to cloud cover), intersection point with inland water is chosen 
+- tested:
+    + remove outlier (2*std): excludes good points too where std is very small
+    + cut transects to max water extent raster as well (too patchy cause it includes all inland waters that have ever 
+    been detected, results in many transect multilinestrings)
+- other ideas? 
+    + use fixed distance, if point is more than 1 km from median, exclude it? 
+    + mhmm... still stuck with the same fuckin problem, I'm afraid :( 
+
+THOUGH, IMPROVED SOMETHING! :) 
+
+
+
+09.03. my activities of last week: 
+- transects: chose the outmost intersection point for each year, if it is fu
+- rework javascript code for raster processing 
+- made it more efficient with less server-client interaction  
+- included a pixel-based quality layer with cloud-free observations per pixel (highly depends on the satellite path, much 
+  better in Central Vietnam than e.g. in the MD)
+- worked with quality layer in rasterio (calculate average observations per pixel )
+

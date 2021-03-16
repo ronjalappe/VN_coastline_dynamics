@@ -1,0 +1,57 @@
+
+## Shoreline extraction from binary Landsat images for Vietnam (1980-2021)
+
+This notebook extracts subpixel contours from binary land/ water images derived from the Landsat imagery, which have been processing on the Google Earth Engine (*reference to Javascript-file*). 
+
+Content of the notebook:
++ Setup: Python libaries, Directories, etc.
++ Contour extraction 
++ Removal of short LineStrings
++ ...
+
+# Libraries
+import os
+import numpy as np
+import geopandas as gpd
+import shapely as shp
+import rasterio as rio 
+from rasterio.plot import show 
+from coasty import postprocess
+
+
+# Directories
+data_dir = os.path.join(os.getcwd(),"test_data")
+proc_tiles_path = os.path.join(os.path.join(data_dir,"VN_processing_polygons"))
+osm_sl_path = os.path.join(os.path.join(data_dir,"VN_osm_coastline"))
+test_box_path = os.path.join(os.path.join(data_dir,"test_box.geojson"))
+
+# Params
+crs = "EPSG:3857"
+
+
+
+
+# access raster files by proccessing tiles
+proc_tiles = gpd.read_file(proc_tiles_path)
+
+for i in range(0,len(proc_tiles)):
+    raster_folder_path = os.path.join(data_dir,"P"+str(i))
+    if os.path.exists(raster_folder_path):
+        for r in os.listdir(raster_folder_path):
+            if not r.endswith("reproj.tif") or r.endswith("clip.tif"):
+                raster_path = os.path.join(raster_folder_path,r)
+                raster_path_reproj = os.path.join(raster_folder_path,os.path.splitext(r)[0]+"_reproj.tif")
+                raster_path_clip = os.path.join(raster_folder_path,os.path.splitext(r)[0]+"_clip.tif")
+                if not os.path.exists(raster_path_reproj):
+                    postprocess.reproject_raster(raster_path,raster_path_reproj,crs)
+                if not os.path.exists(raster_path_clip):
+                    postprocess.crop_raster(raster_path_reproj,test_box_path,raster_path_clip)
+                    print(r," clipped")
+                date = r[2:6]
+                print(date)
+                raster = rio.open(raster_path_clip)
+                show(raster)
+
+                #shoreline = postprocess.subpixel_contours(raster,30)
+                #print(shoreline)
+                break
