@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import shapely as shp
 import pandas as pd
@@ -17,6 +18,7 @@ def download_from_drive(export_folder, out_path, tile_name):
     gauth = GoogleAuth()
     gauth.LocalWebserverAuth() # Creates local webserver and auto handles authentication.
     drive = GoogleDrive(gauth)
+    print('Authentification sucessful.')
 
     folder_list = drive.ListFile({'q': "'root' in parents and trashed=false"}).GetList()
     exportFolderID = [folder['id'] for folder in folder_list if folder['title']==export_folder][0]
@@ -230,15 +232,18 @@ def remove_small_lines(gdf, min_size):
     new_gdf = new_gdf.reset_index(drop=True)
     return new_gdf
     
-def draw_transects_polygon(gdf, length, distance, min_line_length):
+def draw_transects_polygon(gdf, length, distance, min_line_length,sigma=3,out_path_poly=None):
     """Create transects perpendicular to a polygons outline. The shape of the
-    the polygon is smoothed using a Gaussian Filter (Sigma: 3).  
+    the polygon is smoothed using a Gaussian Filter (Sigma: 3)
 
     Args:
         gdf (GeoDataFrame): Geopandas GeoDataFrame with Polygons or Multipolygons
-        length (int): Length of the transects in m
-        distance (int): Distance between transects in m
-        min_line_length (int): Minimum length of the Polygon line to generate transects at the
+        length (int): Length of transects in m
+        distance (int): Distance between transects in m 
+        min_line_length (min): Minimum length of the polygon line to generate transects at (e.g. to remove islands)
+        sigma (int, optional): Sigma value for Gaussian filter to smooth the polygon outlines. Defaults to 3.
+        out_path_poly (string, optional): Path to save the smoothed polygon, if not defined polygon won't be saved 
+            or returned. Defaults to None.
 
     Returns:
         GeoDataFrame: Geopandas GeoDataFrame with transects as LineStrings 
@@ -257,11 +262,11 @@ def draw_transects_polygon(gdf, length, distance, min_line_length):
             new_xy = np.transpose([poly.exterior.interpolate(t).xy for t in np.linspace(0,poly.length,n_points,False)])[0]
             x = new_xy[0]
             y = new_xy[1]
-            # number of points where to interpolate
+            # number of points where to interpolate MultiPolygon
             t1 = np.linspace(0, 1, len(x))
             t2 = np.linspace(0, 1, n_points)
-            x2 = gaussian_filter1d(x, 3)
-            y2 = gaussian_filter1d(y, 3)
+            x2 = gaussian_filter1d(x, sigma)
+            y2 = gaussian_filter1d(y, sigma)
             # interpolate on smoothed line
             x3 = np.interp(t1, t2, x2)
             y3 = np.interp(t1, t2, y2)
@@ -274,15 +279,19 @@ def draw_transects_polygon(gdf, length, distance, min_line_length):
                     a = new_points[index]
                     b = new_points[index+1]
                     ab = shp.geometry.LineString([a,b])
-                    left = ab.parallel_offset(length/2, 'left')
-                    right = ab.parallel_offset(length/2, 'right')
-                    c = left.boundary[1]
-                    d = right.boundary[0]  # note the different orientation for right offset
-                    cd = shp.geometry.LineString([c,d])
-                    transects.append(cd)
+                    if not ab.length == 0:
+                        left = ab.parallel_offset(distance,'left')
+                        right = ab.parallel_offset(length/2,'right')
+                        if not left.is_empty and not right.is_empty:
+                            c = left.boundary[1]
+                            d = right.boundary[0]  # note the different orientation for right offset
+                            cd = shp.geometry.LineString([c,d])
+                            transects.append(cd)
             transects_gdf = gpd.GeoDataFrame(geometry=transects,crs=crs)
             all_transects.append(transects_gdf)
     all_polygons_gdf = gpd.GeoDataFrame(geometry=polygons,crs=crs)
+    if out_path_poly is not None:
+        all_polygons_gdf.to_file(out_path_poly,driver="GeoJSON")
     all_transects_gdf = pd.concat(all_transects,ignore_index=True)
     all_transects_gdf['id'] = all_transects_gdf.index
     return all_transects_gdf

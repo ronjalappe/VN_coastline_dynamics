@@ -2,5 +2,5 @@
 #/.env.development
 #/client_secrets.json
 **/.vscode
-**/.test_data
-**/.data
+**/test_data
+**/data
