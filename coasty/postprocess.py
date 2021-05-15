@@ -232,7 +232,7 @@ def remove_small_lines(gdf, min_size):
     new_gdf = new_gdf.reset_index(drop=True)
     return new_gdf
     
-def draw_transects_polygon(gdf, length, distance, min_line_length,sigma=3,out_path_poly=None):
+def draw_transects_polygon(gdf, length_l, length_r, distance, min_line_length,sigma=3,out_path_poly=None):
     """Create transects perpendicular to a polygons outline. The shape of the
     the polygon is smoothed using a Gaussian Filter (Sigma: 3)
 
@@ -280,8 +280,8 @@ def draw_transects_polygon(gdf, length, distance, min_line_length,sigma=3,out_pa
                     b = new_points[index+1]
                     ab = shp.geometry.LineString([a,b])
                     if not ab.length == 0:
-                        left = ab.parallel_offset(distance,'left')
-                        right = ab.parallel_offset(length/2,'right')
+                        left = ab.parallel_offset(length_l,'left')
+                        right = ab.parallel_offset(length_r,'right')
                         if not left.is_empty and not right.is_empty:
                             c = left.boundary[1]
                             d = right.boundary[0]  # note the different orientation for right offset

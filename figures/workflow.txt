@@ -1,0 +1,71 @@
+Workflow - Draft: 
+
+1) SHORELINE CHANGE 
+Inputs:
+1. Clip OSM shoreline to AOI 
+2. Create 20 km buffer around it (to guarantee an equal proportion of land and water for the Otsu threshold to work) 
+3. Subdivide Polygon to areas < 20.000km2 
+4. Time period for each Sensor 
+
+Processing GEE: 
+1. Image retrieval (one ImageCollection per year)
+For LANDSAT 5 & LANDSAT 8
+2. Cloud masking of all selected images
+(3. Removal of all empty ImageCollections)
+4. Create band with number of (cloud-free) observation per pixel for each ImageCollection 
+5. Calcualtion of MNDWI (no-water: ≈< 0, water ≈>0) 
+6. Creation of Percentile 80 image from MNDWI ImageCollection (to reflect high tide situation) 
+7. Merge LS5 and LS8 ImageCollection to one Image Collection
+8. Calculate Otsu threshold for each image 
+9. Create Binary Land Water Image using the threshold 
+10. Export binary images to Google Drive 
+
+Postprocessing locally: 
+1. Automatic download from Google Drive 
+2. Reproject images to projected coordinate system 
+3. Mask out pixel with only 1 observation 
+
+ON THE ONE HAND:
+   4. Marching Square Contouring 
+   5. Contour Smoothing using Gaussian Filter, Sigma:3
+   6. Removal of lines < 3 km to eliminate small inland water bodies or islands/ ships etc. 
+ON THE OTHER: 
+   3. Calculate min water extent raster 
+   4. Remove pixel cluster < 50 km2
+   5. Vectorize raster
+   6. Merge min water extent polygons of all processing tiles 
+   7. Smooth polygon line  
+   8. Input: GADM admin boundary polygon (https://data.humdata.org/dataset/viet-nam-administrative-boundaries-polygon-polyline)
+   9. Smooth land polygon 
+   10. Create shore perpendicular transects along land polygon
+   11. Clip transects to min water extent raster 
+BRING TOGETHER: 
+   12. Calcualte intersections between annual shorelines and transects
+
+Analysis:
+ 1. Quantify coastline change along transects 
+
+---------------------------------------------------------------------------------------------
+2.) TIDAL EFFECTS QUANTIFICATION 
+Identification of low and high tide Landsat acquisitions:
+1. Cleaning of sea level data
+2. Calcualtion of Landat overpass time 
+3. Filtering of sea level data by Landsat acquisition hour 
+4. Identification of low and high tide peaks (DOY +/- 1)
+5. creation of low and high tide date lists for each available year 
+
+Selection of nearly cloud-free LS images at low and high tides 
+1. Filter Landsat archive by 3-day date range 
+2. calculate cloud cover within AOI 
+3. Filter by CC (< 20%)
+4. Cloud masking 
+5. Create daily mosaics 
+6. Remove mosaics covering <= 2/3 of AOI 
+7. Create low and high tide image pairs 
+8. Extract smooth shorelines (compare 1. method)
+9. Calculate displacement between low and high tide shorelines for each image pair (Median, std, range)
+
+
+
+
+
