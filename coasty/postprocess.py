@@ -37,6 +37,7 @@ def download_from_drive(export_folder, out_path, tile_name):
             print('Downloading {}...'.format(fname))
             f = drive.CreateFile({'id': file['id']})
             f.GetContentFile(fname)
+            f.Trash()
         else:
             print('File', fname, 'already exists.')
 
@@ -139,8 +140,33 @@ def polygonize_raster(raster_path,raster_value,min_length):
     # remove small polygons with given min length
     polygons_gdf = postprocess.remove_small_lines(polygons_gdf,min_length)
     return polygons_gdf
-    
-def subpixel_contours(raster_path, scale, threshold=0.5, sigma=3):
+
+def subpixel_contours(raster_path, value):
+    """Uses skimage.measure.fine_contours to extract contours from a grey-scale image.
+
+    Args:
+        raster_path (string): path to raster file which
+        value (float): Threshold to draw the subpixel contour line. 
+
+    Returns:
+        Geopandas.GeoDataFrame: GeoDataFrame that contains one MultiLineString with all detected
+        contours. Projected and transformed to the crs of the input raster. 
+    """
+    with rio.open(raster_path,"r") as raster:
+        array = raster.read(1)
+        t = raster.transform
+        aff_matrix= [t.b, t.a, t.e, t.d,t.xoff+t.a*0.5,t.yoff+t.e*0.5]
+        contours = measure.find_contours(array,value)
+        lines = []
+        for contour in contours: 
+            line = shp.geometry.asLineString(contour)
+            #line = shp.affinity.affine_transform(line,aff_matrix)
+            lines.append(line)
+    lines_gdf = gpd.GeoDataFrame(geometry=lines,crs= raster.crs)
+    lines_gdf.geometry = lines_gdf.geometry.affine_transform(aff_matrix)
+    return lines_gdf
+
+def subpixel_contours_smooth(raster_path, scale, threshold=0.5, sigma=3):
     """Uses skimage.measure.find_contours to extract contours from a binary image. 
     Smoothens contour line with scipy.interpolate to achieve a subpixel border
     segmentation. 
@@ -214,7 +240,7 @@ def remove_small_lines(gdf, min_size):
 
     Args:
         gdf (GeoDataFrame): Geopandas GeoDataFrame containing shapely LineString or MultiLineString geometries.
-        min_size (int): Minimum length of lines to keep. Keep units of the chosen coordinate system in mind.
+        min_size (int): Minimum length of lines to keep in meter. Keep units of the chosen coordinate system in mind.
         A projected coordinate system is recommended for any measurements.
                         
     Returns:
