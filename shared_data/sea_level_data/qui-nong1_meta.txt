@@ -1,0 +1,68 @@
+{\rtf1\ansi\ansicpg1252\cocoartf1671\cocoasubrtf600
+{\fonttbl\f0\fmodern\fcharset0 Courier;}
+{\colortbl;\red255\green255\blue255;\red0\green0\blue0;}
+{\*\expandedcolortbl;;\cssrgb\c0\c0\c0;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww10800\viewh8400\viewkind0
+\deftab720
+\pard\pardeftab720\sl280\partightenfactor0
+
+\f0\fs24 \cf2 \expnd0\expndtw0\kerning0
+                                                                                \
+                            QUALITY ASSESSMENT OF SEA LEVEL DATA                \
+                                           by the                               \
+                   UH SEA LEVEL CENTER/NATIONAL OCEANOGRAPHIC DATA CENTER     \
+                                 JOINT ARCHIVE FOR SEA LEVEL                    \
+                                       updated: 03 Jul 2013\
+              Station  : Qui Nhon-A                Latitude:  13 46.0N\
+              Country  : Vietnam                  Longitude: 109 15.0E\
+              JASL #   : 381A                 Time Meridian: 105E (GMT + 7 hr) \
+              GLOSS #  : 075  Originator #: 814      NODC #: 11103901\
+              Contributor  : Marine Hydro-meteorological Center\
+                             No. 4 Dang Thai Than Street\
+                             Hanoi VIETNAM\
+              Originator   : same\
+              Original Data: analog (STD)\
+              Instrmnt Type: standard (STD) float/well \
+              Digitzd Intvl: hourly (STD)\
+              Present Data : Hourly, daily, and monthly values obtained by:     \
+                    Hourly : spot digitization on the hour (STD)\
+                    Daily  : 119-point convolution filter (Bloomfield, 1976)    \
+                             centered on noon applied to the hourly data        \
+                             with respective periods of the 95, 50, and 5%      \
+                             amplitude points at 124.0, 60.2, and 40.2 hours    \
+                    Monthly: Simple average of all daily values; calculated if  \
+                             7 or fewer days are missing                        \
+              Span of data : 01 Jan 1994 - 31 Dec 2005\
+              Gaps > 1 mon : 31 Dec 1996 - 31 Dec 1999;31 Dec 2000 - 31 Dec 2002\
+              Time Refernce: GMT (hours 00-23)   Space-filler Flag   :-9999     \
+              Units        : millimeters         Missing Data Flag   : 9999     \
+              Existing     : Yes                 Operational         : yes\
+              Sat. Trans.  : No                  Distribution        : 1994-2005\
+              Refernce Levl: All heights have been referred to the station tide \
+                             staff zero which is linked to fixed benchmarks.\
+                             Tide Gauge Zero (TGZ) = Admirality Chart Datum.\
+                             TGZ = 3.546m below TGBM.\
+                             TGBM: bolt outside of tide gauge shelter, adjacent\
+                             to front wall of shelter. \
+\
+                             381A and 381B are separate because they have\
+                             unique reference zeros.\
+              Comment      : The daily  and monthly means reveal no apparent \
+                             changes in the reference level. \
+                                                                                \
+                    CI MISSING              REPLACED GAPS     QUESTIONABLE      \
+              YEAR (%) DATA                 OR BAD DATA       FLUCTUATIONS      \
+              ---- --- -------------------- --------------- --------------------\
+              1994 100 none                 none            none\
+              1995 100 none                 none            none\
+              1996  99 365                  none            none\
+              1997   0 1-365                none            none\
+              1998   0 1-365                none            none\
+              1999   0 1-365                none            none\
+              2000  99 366                  none            none\
+              2001   0 1-365                none            none\
+              2002   0 1-365                none            none\
+              2003 100 none                 none            none\
+              2004 100 none                 none            none\
+              2005  99 365                  none            none\
+}
