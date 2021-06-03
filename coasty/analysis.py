@@ -1,6 +1,8 @@
 
 import rasterio as rio 
 import numpy as np
+import geopandas as gpd
+import shapely as shp
 from skimage import morphology
 
 def calc_water_extent(files_list,min_file,max_file):
@@ -13,18 +15,18 @@ def calc_water_extent(files_list,min_file,max_file):
         max_file (string): Path to max water extent file, that will be created. 
     """
     all_masks = None
-    for idx, file in enumerate(files):#
+    for idx, file in enumerate(files_list):#
         print("Eating file: %s" % file)
         with rio.open(file, "r") as src:  # src has meta that can be accessed through 
                                             # src.meta or directly, e.g. src.height
             if all_masks is None:  # we have not defined it yet but we only have do define ones
-                all_masks = np.zeros((len(files), src.height, src.width), dtype=np.float32)  # np.float32 may have nans
+                all_masks = np.zeros((len(files_list), src.height, src.width), dtype=np.float32)  # np.float32 may have nans
                 meta = src.meta
             all_masks[idx] = src.read(1)                    
     min_water_extent = np.nanmin(all_masks, 0)  # water = 1, min water extent
     max_water_extent = np.nanmax(all_masks, 0)  # no water = 0, max water extent
     # write the masks
-    for arr, out_file in zip([min_water_extent, max_water_extent], [min_water_file, max_water_file]):
+    for arr, out_file in zip([min_water_extent, max_water_extent], [min_file, max_file]):
         with rio.open(out_file, "w", **meta) as tgt:
             tgt.write(arr,1)
 
@@ -81,3 +83,5 @@ def vectorize_raster(raster_path,raster_value):
     # save polygons as geodataframe
     polygons_gdf = gpd.GeoDataFrame(geometry=polygons,crs=crs)
     return polygons_gdf
+
+

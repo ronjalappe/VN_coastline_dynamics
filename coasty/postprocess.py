@@ -9,6 +9,7 @@ from rasterio.mask import mask
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from skimage import measure
 from scipy import interpolate
+from scipy import stats
 from scipy.ndimage import gaussian_filter1d
 
 def download_from_drive(export_folder, out_path, tile_name):
@@ -322,7 +323,7 @@ def draw_transects_polygon(gdf, length_l, length_r, distance, min_line_length,si
     all_transects_gdf['id'] = all_transects_gdf.index
     return all_transects_gdf
 
-def compute_intersections(transects, shorelines, reference=None):
+def compute_intersections(transects, shorelines, remove_outliers=False, reference=None):
     """This functions calculates intersections between shore-perpendicular transects and a GeoDataFrame with shorelines. 
     It calculates the distance of the each intersection point to the origin of the transects and adds it as a property to 
     the output intersections GeoDataFrame. If the parameter "reference" is given, the distance of each intersection point 
@@ -376,7 +377,7 @@ def compute_intersections(transects, shorelines, reference=None):
         intersections_gdf =  pd.concat(intersections,ignore_index=True)
         # drop empty geometries
         intersections_gdf = intersections_gdf[~intersections_gdf.is_empty].reset_index(drop=True)
-        # separate Multipoint geometries 
+        # seperate Multipoint geometries 
         intersections_gdf = intersections_gdf.explode()
         # calculate the distance of intersections points to the (landwards) origin of the transect
         dist = []
@@ -385,6 +386,13 @@ def compute_intersections(transects, shorelines, reference=None):
             dist.append(origin.distance(inter.geometry))
         # add distance information to dataframe
         intersections_gdf['dist_to_transect_origin'] = dist
+        
+        ### 1. OPTION: CHOOSE THE OUTERMOST POINT IN SEAWARDS DIRECTION 
+        intersections_gdf = intersections_gdf.sort_values(by="dist_to_transect_origin")
+        intersections_gdf = intersections_gdf.drop_duplicates(subset="year",keep="last")
+        
+        
+        ### 2. OPTION: CALCULATE DISTANCE TO REFERENCE SHORELINE AND SELECT POINT 
         # additionally calculate distance to reference shoreline
         if reference is not None:
             dist_to_osm_sl = []
@@ -396,19 +404,213 @@ def compute_intersections(transects, shorelines, reference=None):
             intersections_gdf["dist_to_osm_sl"] = dist_to_osm_sl
             intersections_gdf = intersections_gdf.sort_values(by="dist_to_osm_sl")
             intersections_gdf = intersections_gdf.drop_duplicates(subset="year",keep="first")
-        #max_dist = np.max(intersections_gdf.dist_to_transect_origin)
-        #intersections_gdf['change'] = intersections_gdf.dist_to_transect_origin - max_dist        
-        #intersections_gdf = intersections_gdf.drop_duplicates(subset="year",keep="first")
+
+        ### 3. OPTION: CALCULATE DISTANCE TO MEDIAN INTERSECTION POINT AND SELECT UPON    
+        # calculate the median distance to the origin of the referenintersectionsce shoreline
+        #median_dist = np.median(intersections_gdf.dist_to_transect_intersectionsorigin)
+        #intersections_gdf['change'] = intersections_gdf.dist_to_traintersectionsnsect_origin - median_dist
+        # create new column with absolute change to identify outlierintersectionss
+        #intersections_gdf['abs_change'] = abs(intersections_gdf.chaintersectionsnge)
+        # drop duplicates. keep only one point per year which is clointersectionssest to the median 
+        #intersections_gdf = intersections_gdf.sort_values(by="abs_cintersectionshange")
+        #intersections_gdf = intersections_gdf.drop_duplicates(subseintersectionst="year",keep="first")
+        
+        # remove outliers 
+        if remove_outliers == True:
+            inter_median = np.median(intersections_gdf.dist_to_transect_origin)
+            inter_std =  np.std(intersections_gdf.dist_to_transect_origin)
+            intersections_gdf = intersections_gdf[intersections_gdf.dist_to_transect_origin.map(
+                    lambda x: abs(x-inter_median))<abs(3*inter_std)]
+        
         # sort dataframe by date
         if 'year' in intersections_gdf:
             intersections_gdf = intersections_gdf.sort_values(by="year")
         # add dataframe to list
         all_intersections.append(intersections_gdf)
+        print(t,"intersected")
     # merge all dataframes
     new_gdf = pd.concat(all_intersections,ignore_index=True)
     new_gdf = new_gdf.to_crs(crs)
     return new_gdf
 
+
+def calc_change_metrics(intersections,min_intersections,remove_outliers=True):
+    """Calculation of coastline change metrics EPR, SCE, LRR. Additionally a classification ['No-change','Accretion',
+    'Erosion','Complex dynamic'] is caclulated based on the slope and stddev of the LRR. Transects covering the SCE
+    are created. 
+
+    Args:
+        intersections (GeoDataFrame): with Points [required columns: "transect_id", "year", "dist_to_transects_origin"]
+
+    Returns:
+        GeoDataFrame: with transects and information on coastlines change
+    """
+    # get all valid transect ids to iterate through them 
+    t_idx = intersections.transect_id.unique().tolist()
+    lines = []
+    class_ids1 = []
+    class_ids1a = []
+    class_ids2 = []
+    class_ids2a = []
+    slopes = []
+    stderrs = []
+    eprs = []
+    for t in t_idx:
+        inter = intersections[intersections.transect_id == t]
+        # skip transects with less than 5 intersections:
+        if len(inter) > min_intersections:
+            # 1. Calculate the change since the first year represented on the transect 
+            inter['year'] = [int(y) for y in inter.year]
+            min_year = inter[inter.year == np.min(inter.year)]
+            inter['change'] = inter.dist_to_transect_origin-np.min(min_year.dist_to_transect_origin)
+            # remove outlier points
+            if remove_outliers == True: 
+                inter_median = np.median(inter.change) #choose mean instead of median (26.05.)
+                inter_std =  np.std(inter.change)
+                inter = inter[inter.change.map(lambda x: abs(x-inter_median))<abs(3*inter_std)]
+            # skip transects that have been reduced to less than 5 intersections
+            if len(inter) > min_intersections :
+                # 2. Calculate the Linear regression of all points at the transect 
+                youngest = inter[inter.year == np.min(inter.year)]
+                oldest = inter[inter.year == np.max(inter.year)]
+                epr = (oldest.change.iloc[0]-youngest.change.iloc[0])/(oldest.year.iloc[0] - youngest.year.iloc[0])
+                eprs.append(epr)
+                reg = stats.linregress(inter.year, inter.change)
+                slopes.append(reg.slope)
+                stderrs.append(reg.stderr)
+                # 3. classification level 1
+                if reg.slope > 0.5:
+                    class_id1 = "Accretion"
+                elif reg.slope < -0.5:
+                    class_id1 = "Erosion"
+                elif reg.slope < 0.5 and reg.slope > -0.5:
+                    class_id1 = "Stable"
+                class_ids1.append(class_id1)
+                # 3. classification level 1a
+                tmax = np.max(inter.change)
+                tmin = np.min(inter.change)
+                if tmax-tmin < 30:
+                    class_id1a = "Stable"
+                elif abs(reg.slope) > reg.stderr and reg.slope > 0:
+                    class_id1a = "Accretion"
+                elif abs(reg.slope) > reg.stderr and reg.slope < 0:
+                    class_id1a = "Erosion"
+                elif abs(reg.slope) <= reg.stderr:
+                    class_id1a = "Complex"
+                class_ids1a.append(class_id1a)
+                # 3. classification level 2
+                if reg.slope > 0.5 and reg.slope < 1:
+                    class_id2 = "Moderate accretion"
+                elif reg.slope > 1 and reg.slope < 3:
+                    class_id2 = "Intense accretion"
+                elif reg.slope > 3 and reg.slope < 5:
+                    class_id2 = "Severe accretion"
+                elif reg.slope > 5:
+                    class_id2 = "Extreme accretion"
+                elif reg.slope < 0.5 and reg.slope > -0.5:
+                    class_id2 = "Stable"
+                elif reg.slope < -0.5 and reg.slope > -1:
+                    class_id2 = "Moderate erosion"
+                elif reg.slope < -1 and reg.slope > -3:
+                    class_id2 = "Intense erosion"
+                elif reg.slope < -3 and reg.slope > -5:
+                    class_id2 = "Severe erosion"
+                elif reg.slope < -5:
+                    class_id2 = "Extreme Erosion"
+                class_ids2.append(class_id2)
+                # 4. classification level 2a
+                if abs(reg.slope) > reg.stderr and reg.slope > 0.5 and reg.slope < 1:
+                    class_id2a = "Moderate accretion"
+                elif abs(reg.slope) > reg.stderr and reg.slope > 1 and reg.slope < 3:
+                    class_id2a = "Intense accretion"
+                elif abs(reg.slope) > reg.stderr and reg.slope > 3 and reg.slope < 5:
+                    class_id2a = "Severe accretion"
+                elif abs(reg.slope) > reg.stderr and reg.slope > 5:
+                    class_id2a = "Extreme accretion"
+                elif abs(reg.slope) > reg.stderr and reg.slope < 0.5 and reg.slope > -0.5:
+                    class_id2a = "Stable"
+                elif abs(reg.slope) > reg.stderr and reg.slope < -0.5 and reg.slope > -1:
+                    class_id2a = "Moderate erosion"
+                elif abs(reg.slope) > reg.stderr and reg.slope < -1 and reg.slope > -3:
+                    class_id2a = "Intense erosion"
+                elif abs(reg.slope) > reg.stderr and reg.slope < -3 and reg.slope > -5:
+                    class_id2a = "Severe erosion"
+                elif abs(reg.slope) > reg.stderr and reg.slope < -5:
+                    class_id2a = "Extreme Erosion"
+                elif abs(reg.slope) <= reg.stderr:
+                    class_id2a = "Complex"
+                class_ids2a.append(class_id2a)
+                # 4. Create lines between first and last intersection 
+                #if len(inter)>0:
+                p1 = inter[inter.change == tmin].geometry.iloc[0]
+                p2 = inter[inter.change == tmax].geometry.iloc[0]
+                line = shp.geometry.LineString([p1,p2])
+                lines.append(line)
+            else:
+                print("Transect",t,"removed.")
+                lines.append(shp.geometry.LineString())
+                slopes.append(np.nan)
+                stderrs.append(np.nan)
+                class_ids1.append(np.nan)
+                class_ids1a.append(np.nan)
+                class_ids2.append(np.nan)
+                class_ids2a.append(np.nan)
+                eprs.append(np.nan)
+        else:
+            print("Transect",t,"removed.")
+            lines.append(shp.geometry.LineString())
+            slopes.append(np.nan)
+            stderrs.append(np.nan)
+            class_ids1.append(np.nan)
+            class_ids1a.append(np.nan)
+            class_ids2.append(np.nan)
+            class_ids2a.append(np.nan)
+            eprs.append(np.nan)
+    # add metrics to dataframe
+    lines_gdf = gpd.GeoDataFrame(geometry=lines)
+    lines_gdf['Transect_id'] = t_idx
+    lines_gdf['class_L1'] = class_ids1
+    lines_gdf['class_L1a'] = class_ids1a
+    lines_gdf['class_L2'] = class_ids2
+    lines_gdf['class_L2a'] = class_ids2a
+    lines_gdf['LRR_slope'] = slopes
+    lines_gdf['LRR_stderr'] = stderrs
+    # define datatypes
+    lines_gdf["EPR"] = eprs
+    lines_gdf['LRR_slope'] = lines_gdf['LRR_slope'].astype(float)
+    lines_gdf['LRR_stderr'] = lines_gdf['LRR_stderr'].astype(float)
+    lines_gdf['EPR'] = lines_gdf['EPR'].astype(float)
+    return lines_gdf
+
+def define_severe_hotspots(gdf,threshold,direction):
+    """The function identified severe hotspot above given threshold. 
+
+    Args:
+        gdf (GeoDataFrame): with LineStrings, required columns: ['cluster_no','LRR_slope','LRR_std']
+        threshold (float): rate from which coastal change is considered "severe". 
+        direction (string): "smaller" for negative change rates, "bigger" for positive change rates
+
+    Returns:
+        GeoDataFrame: with LineStrings of identified severe hotspots
+    """
+    severe_hotspots = []
+    number_hotspots = len(gdf.cluster_no.unique())
+    for n in range(number_hotspots):
+        cluster = gdf[gdf.cluster_no==n]
+        mean_rate = np.mean(cluster.LRR_slope)
+        mean_stderr = np.mean(cluster.LRR_stderr)
+        if direction == "smaller":
+            if mean_rate < threshold and mean_stderr < abs(mean_rate):
+                print(mean_rate)
+                severe_hotspots.append(cluster)
+        elif direction == "bigger":
+            if mean_rate > threshold and mean_stderr < abs(mean_rate):
+                print(mean_rate)
+                severe_hotspots.append(cluster)
+        else:
+            print("Choose either smaller of bigger as direction.")
+    severe_hotspots_gdf = pd.concat(severe_hotspots)
+    return severe_hotspots_gdf
 
 # TEST IT 
 #import os
