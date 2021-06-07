@@ -323,7 +323,7 @@ def draw_transects_polygon(gdf, length_l, length_r, distance, min_line_length,si
     all_transects_gdf['id'] = all_transects_gdf.index
     return all_transects_gdf
 
-def compute_intersections(transects, shorelines, remove_outliers=False, reference=None):
+def compute_intersections(transects, shorelines, keep = "last",remove_outliers=False, reference=None):
     """This functions calculates intersections between shore-perpendicular transects and a GeoDataFrame with shorelines. 
     It calculates the distance of the each intersection point to the origin of the transects and adds it as a property to 
     the output intersections GeoDataFrame. If the parameter "reference" is given, the distance of each intersection point 
@@ -389,7 +389,7 @@ def compute_intersections(transects, shorelines, remove_outliers=False, referenc
         
         ### 1. OPTION: CHOOSE THE OUTERMOST POINT IN SEAWARDS DIRECTION 
         intersections_gdf = intersections_gdf.sort_values(by="dist_to_transect_origin")
-        intersections_gdf = intersections_gdf.drop_duplicates(subset="year",keep="last")
+        intersections_gdf = intersections_gdf.drop_duplicates(subset="year",keep=keep)
         
         
         ### 2. OPTION: CALCULATE DISTANCE TO REFERENCE SHORELINE AND SELECT POINT 
