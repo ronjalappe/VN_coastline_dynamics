@@ -1,8 +1,8 @@
-#/Stand.txt
+/Stand.txt
 #/.env.development
 /client_secrets.json
 /contour_tests.ipynb
-/test_analysis.ipynb
+#/test_analysis.ipynb
 **/.vscode
 **/test_data
 **/data
