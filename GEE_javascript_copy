@@ -1,0 +1,259 @@
+/// COASTLINE DETECTION IN VIETNAM
+
+/* 
+//-------------------------------- Content of the script ---------------------------------- // 
+Time series of shoreline dynamics using Landsat 5 & 8. 
+
+- Annual cloud-free mosaics for area of interest
+- Merged image collection of Landsat 5 & 8 mosaics
+- MNDWI 
+- Otsu threshold to create binary rasters
+- Cleaned using majority filter 
+- Export to Drive
+*/
+
+//---------------------------------- Define parameters ------------------------------------- // 
+var aoi = ee.Geometry(table.geometry().geometries().get(5));
+var site_name = 'P5'
+var start_year = 1984
+var end_year = 2021
+var folder = 'GEE' // where to save outputs on Google Drive
+
+//------------------------------- Cloud masking & mosaicing -------------------------------- // 
+//-------------------------------- (for annual composites) --------------------------------- // 
+var years = ee.List.sequence(start_year,end_year)
+var years_ls5 = years.filter(ee.Filter.lte('item',2012))
+var years_ls8 = years.filter(ee.Filter.gte('item',2013))
+
+//..........................................................................................//
+// FUNCTIONS 
+
+// function to create list of image collections for each year
+function createYearlyCols(y){
+  var year = ee.Number(y).int();
+  var start = ee.String(year).cat("-01-01");
+  var end = ee.String(year).cat("-12-31");
+  var col = ee.ImageCollection("LANDSAT/LT05/C01/T1_SR")
+    .filterDate(start,end)
+    .filterBounds(aoi)
+    //.filter(ee.Filter.lt('CLOUD_COVER',20))
+  var number = ee.Number(col.size())
+  var id = ee.String(year).cat('_L5_').cat(site_name)//.cat('_').cat(number).cat('aq')
+  return(col.set(
+    'year',year,
+    'number_of_aquisitions',number,
+    'system:id',id,
+    'system:index',id))
+}
+
+// function to remove empty image collections 
+function remove_empty_collections(img_col){
+  return ee.Algorithms.If(ee.ImageCollection(img_col).size().gt(0),img_col)
+}
+
+// function for cloud masking Landsat 5
+function cloudMaskL457(image) {
+  var qa = image.select('pixel_qa');
+  // If the cloud bit (5) is set and the cloud confidence (7) is high
+  // or the cloud shadow bit is set (3), then it's a bad pixel.
+  var cloud = qa.bitwiseAnd(1 << 5)
+                  .and(qa.bitwiseAnd(1 << 7))
+                  .or(qa.bitwiseAnd(1 << 3));
+  // Remove edge pixels that don't occur in all bands
+  var mask2 = image.mask().reduce(ee.Reducer.min());
+  return image.updateMask(cloud.not()).updateMask(mask2);
+}
+
+// function for cloud masking Landsat 8
+function cloudMaskL8(image) {
+  var qa = image.select('pixel_qa');
+  var cloud = qa.bitwiseAnd(1 << 5)
+                  .and(qa.bitwiseAnd(1 << 7))
+                  .or(qa.bitwiseAnd(1 << 9))
+  var shadow = qa.bitwiseAnd(1 << 3)
+  // Remove edge pixels that don't occur in all bands
+  var mask2 = image.mask().reduce(ee.Reducer.min());
+  return image.updateMask(cloud.not()).updateMask(shadow.not()).updateMask(mask2);
+}  
+
+
+// function to calculate the number of valid observations for a given
+// pixel's time series. Takes a collection of masked images.
+function countValidPixels(collection){
+  // For each image in the collection return the mask; returns an image collection.
+  var wrap = function(img){
+    return img.select(0).mask();
+  }
+  // Sum the masks; this gives valid pixel count.
+  // Mask pixels that have 0 observation over the give time series.
+  // Returns an image with number of observations per pixel. 
+  return collection.map(wrap).sum().selfMask()
+};
+
+//..........................................................................................//
+// PROCESSING 
+
+// yearly image collections for Landsat 5
+var ls_5 = years_ls5.map(createYearlyCols)
+
+// filter empty collections 
+var ls_5 = ls_5.map(remove_empty_collections,true);
+//print(ls_5,'L5 ImgCols')
+
+// create annual mosiacs from list of filtered image collections
+var ls5_mosaics = ee.ImageCollection.fromImages(
+  ls_5.map(function(img_col){
+    var ls5_masked = ee.ImageCollection(img_col).map(cloudMaskL457)
+    var nobs = countValidPixels(ls5_masked).rename('nobs');
+    var mndwis = ls5_masked.map(function(img){
+      var mndwi = img.normalizedDifference(['B2','B5'])
+      return mndwi
+    });
+    var p25 = ee.ImageCollection(mndwis).reduce(ee.Reducer.percentile([75])).addBands(nobs)
+    return p25.clip(aoi)
+    .copyProperties(img_col,['year','system:id','system:index','number_of_aquisitions'])
+}));
+//print(ls5_mosaics, 'L5 MNDWI mosaics' )
+
+// yearly image collections for Landsat 8
+var ls_8 = years_ls8.map(function(i){
+  var year = ee.Number(i).int();
+  var start = ee.String(year).cat("-01-01");
+  var end = ee.String(year).cat("-12-31");
+  var col = ee.ImageCollection("LANDSAT/LC08/C01/T1_SR")
+    .filterDate(start,end)
+    .filterBounds(aoi)
+  var number = ee.Number(col.size())
+  var id = ee.String(year).cat('_L8_').cat(site_name)//.cat('_').cat(number).cat('aq')
+  return(col.set(
+    'year',year,
+    'number_of_aquisitions',number,
+    'system:id',id,
+    'system:index',id))
+});
+// filter empty collections 
+var ls_8 = ls_8.map(remove_empty_collections,true);
+
+//print(ls_8,'ImgCols')
+
+// create annual mosiacs from list of filtered image collections
+var ls8_mosaics = ee.ImageCollection.fromImages(
+  ls_8.map(function(img_col){
+    var ls8_masked = ee.ImageCollection(img_col).map(cloudMaskL8)
+    var nobs = countValidPixels(ls8_masked).rename('nobs')
+    var mndwis = ls8_masked.map(function(img){
+      var mndwi = img.normalizedDifference(['B3','B6'])
+      return mndwi
+    });
+    var p25 = ee.ImageCollection(mndwis).reduce(ee.Reducer.percentile([75])).addBands(nobs)
+    return p25.clip(aoi)
+    .copyProperties(img_col,['year','system:id','system:index','number_of_aquisitions'])
+}));
+
+// merge image collections of landsat 5 and 8 mosaics
+var ls_mosaics = ls5_mosaics.merge(ls8_mosaics)
+print(ee.String('Annual mosaics for period: ').cat(ee.Number(start_year)).cat(' - ')
+  .cat(ee.Number(end_year)),ls_mosaics)
+  
+
+// get number of aquisitions statistics 
+var mosaics_list = ls_mosaics.toList(ls_mosaics.size())
+var noa = mosaics_list.map(function(img){
+  return ee.Image(img).get('number_of_aquisitions') 
+});
+
+var years = mosaics_list.map(function(img){
+  return ee.String(ee.Image(img).get('year'))
+});
+
+var meta = ee.Dictionary.fromLists(years,noa)
+print(meta)
+
+
+
+
+//------------------------------- MNDWI & Otsu's threshold -------------------------------- // 
+
+// function to calculate Otsu's threshold
+var otsu = function(histogram) {
+  var counts = ee.Array(ee.Dictionary(histogram).get('histogram'));
+  var means = ee.Array(ee.Dictionary(histogram).get('bucketMeans'));
+  var size = means.length().get([0]);
+  var total = counts.reduce(ee.Reducer.sum(), [0]).get([0]);
+  var sum = means.multiply(counts).reduce(ee.Reducer.sum(), [0]).get([0]);
+  var mean = sum.divide(total);
+  var indices = ee.List.sequence(1, size);
+  // Compute between sum of squares, where each mean partitions the data.
+  var bss = indices.map(function(i) {
+    var aCounts = counts.slice(0, 0, i);
+    var aCount = aCounts.reduce(ee.Reducer.sum(), [0]).get([0]);
+    var aMeans = means.slice(0, 0, i);
+    var aMean = aMeans.multiply(aCounts)
+        .reduce(ee.Reducer.sum(), [0]).get([0])
+        .divide(aCount);
+    var bCount = total.subtract(aCount);
+    var bMean = sum.subtract(aCount.multiply(aMean)).divide(bCount);
+    return aCount.multiply(aMean.subtract(mean).pow(2)).add(
+           bCount.multiply(bMean.subtract(mean).pow(2)));
+  });
+  // Return the mean value corresponding to the maximum BSS.
+  return means.sort(bss).get([-1]);
+};
+
+// add Otsu's threshold to the properties of each mdnwi image 
+var ls_mosaics = ls_mosaics.map(function(image){
+  // generate a histogram
+  var hist = image.reduceRegion({
+    reducer: ee.Reducer.histogram()
+      .combine('mean', null, true)
+      .combine('variance', null, true), 
+    geometry: aoi, 
+    scale: 30,
+    bestEffort: true
+  });
+  // calcualte Otsu's threshold 
+  var threshold = otsu(hist.get('nd_p80_histogram'));
+  return image.copyProperties(image,['year','system:id']).set(
+    "histogram",hist,
+    "Otsu_threshold", threshold)
+});
+
+// create binary layers for MNDWI(land:1, water:0)
+var ls_binary = ls_mosaics.map(function(image){
+  var threshold = ee.Number(image.get('Otsu_threshold'))
+  // exclude nobs band from binarization
+  var nobs = image.select('nobs')
+  var binary = ee.Image(image).select('nd_p80').gt(threshold)
+  // add nobs again band to binarized image 
+  var binary = binary.addBands(nobs)
+  return binary.copyProperties(image,['Otsu_threshold','year','number_of_aquisitions','system:id'])
+});
+
+//----------------------------------- Export shorelines  ---------------------------------- // 
+
+var batch = require('users/fitoprincipe/geetools:batch');
+
+// export collection to google drive
+batch.Download.ImageCollection.toDrive(ls_binary,'GEE', {
+  scale: 30,
+  region: aoi,
+  maxPixels: 10e10
+});
+
+//--------------------------------------- PLOTTING  --------------------------------------- // 
+
+
+// INTERMEDIATE PLOTTING
+var mosaics_list = ls_mosaics.toList(ls_mosaics.size())
+var vis2 = {bands: ['R','G','B'], min: 0, max: 90} 
+var vis1 = {bands: ['nd_p75'],palette: ['red','blue'],min: -1, max: 1}
+var vis = {bands: ['nobs'],palette: ['white','black'],min: 0, max: 10}
+
+Map.centerObject(aoi,8)
+Map.addLayer(ee.Image(mosaics_list.get(15)), vis1,'2003')
+Map.addLayer(ee.Image(mosaics_list.get(27)), vis1,'2016')
+
+//Map.addLayer(ee.Image(binary_list.get(2)), vis)
+//Map.addLayer(ee.Image(binary_list.get(3)), vis)
+//Map.addLayer(ee.Image(binary_list.get(4)), vis)
+
