@@ -1,3 +1,3 @@
 # Vietnam Coastline Dynamics (Python Package and Analysis)
 
-"coasty" is a a package including functions for the postprocessing of binary land/ water rasters, that have been postprocessed on the GEE. The Jupyter Notebooks contain the workflow for a 30 years coastline time series in Vietnam, including a quantification of tidal effects on Landsat imagery.
+"coasty" is a package with functions for the postprocessing of MNDWI land/ water rasters, that have been processed on the GEE (for the script see "GEE_javascript_copy"). The Jupyter Notebooks contain the workflow for a 30 years coastline time series analysis in Vietnam.
