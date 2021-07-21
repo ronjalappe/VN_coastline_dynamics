@@ -72,6 +72,7 @@ def reproject_raster(raster_path, out_path, dst_crs):
                         src_crs=src.crs,
                         dst_transform=transform,
                         dst_crs=dst_crs,
+                        dst_nodata=np.nan,
                         resampling=Resampling.nearest)
             print(os.path.basename(raster_path),'reprojected.')
         else:
@@ -434,7 +435,7 @@ def compute_intersections(transects, shorelines, keep = "last",remove_outliers=F
     return new_gdf
 
 
-def calc_change_metrics(intersections,min_intersections,remove_outliers=True):
+def calc_change_metrics(intersections,min_intersections,crs,remove_outliers=True):
     """Calculation of coastline change metrics EPR, SCE, LRR. Additionally a classification ['No-change','Accretion',
     'Erosion','Complex dynamic'] is caclulated based on the slope and stddev of the LRR. Transects covering the SCE
     are created. 
@@ -567,7 +568,7 @@ def calc_change_metrics(intersections,min_intersections,remove_outliers=True):
             class_ids2a.append(np.nan)
             eprs.append(np.nan)
     # add metrics to dataframe
-    lines_gdf = gpd.GeoDataFrame(geometry=lines)
+    lines_gdf = gpd.GeoDataFrame(geometry=lines,crs=crs)
     lines_gdf['Transect_id'] = t_idx
     lines_gdf['class_L1'] = class_ids1
     lines_gdf['class_L1a'] = class_ids1a
